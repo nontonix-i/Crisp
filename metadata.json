@@ -1,0 +1,6 @@
+{
+  "name": "CrispFlow",
+  "description": "Consignment stock and cash flow management app for snack and cracker merchants",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
