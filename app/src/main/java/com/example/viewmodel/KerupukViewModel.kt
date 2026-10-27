@@ -14,7 +14,12 @@ import com.example.data.model.TransferPedagang
 import com.example.data.repository.ActiveLoanWithBalance
 import com.example.data.repository.DashboardSummary
 import com.example.data.repository.KerupukRepository
+import android.content.Context
+import android.net.Uri
+import com.example.utils.BackupDataPackage
+import com.example.utils.BackupZipHelper
 import com.example.utils.FormatUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -26,6 +31,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class StockSummary(
     val pool: Int,
@@ -278,6 +284,61 @@ class KerupukViewModel(
             if (tangan == 0) {
                 repository.ambilJatahPool(60)
                 _snackbarEvent.emit("Ambil jatah awal berhasil (Stok Saya: 60 pack)")
+            }
+        }
+    }
+
+    // === BACKUP & PEMULIHAN ZIP ===
+
+    fun exportBackupZip(context: Context, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val pkg = withContext(Dispatchers.IO) {
+                    repository.getBackupDataPackage()
+                }
+                val zipFile = withContext(Dispatchers.IO) {
+                    BackupZipHelper.exportToZipFile(context, pkg)
+                }
+                BackupZipHelper.shareZipFile(context, zipFile, pkg.manifest.backupDate)
+                _snackbarEvent.emit("✓ File cadangan ZIP dibuat (${pkg.manifest.totalRecords} data)")
+                onResult(true, "Berhasil diekspor: ${pkg.manifest.totalRecords} baris data")
+            } catch (e: Exception) {
+                val err = "Gagal export cadangan: ${e.message}"
+                _snackbarEvent.emit(err)
+                onResult(false, err)
+            }
+        }
+    }
+
+    fun parseBackupFile(
+        context: Context,
+        uri: Uri,
+        onResult: (Result<BackupDataPackage>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val parsedResult = withContext(Dispatchers.IO) {
+                BackupZipHelper.readBackupFromUri(context, uri)
+            }
+            onResult(parsedResult)
+        }
+    }
+
+    fun restoreBackupPackage(
+        backupPackage: BackupDataPackage,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) {
+                repository.restoreBackupDataPackage(backupPackage)
+            }
+            if (res.isSuccess) {
+                refreshActiveLoans()
+                _snackbarEvent.emit("✓ Pemulihan berhasil! ${backupPackage.manifest.totalRecords} data dimuat ulang")
+                onResult(true, "Data berhasil dipulihkan secara penuh")
+            } else {
+                val err = res.exceptionOrNull()?.message ?: "Gagal memulihkan database"
+                _snackbarEvent.emit(err)
+                onResult(false, err)
             }
         }
     }

@@ -8,6 +8,8 @@ import com.example.data.model.PinjamanSetoran
 import com.example.data.model.Setoran
 import com.example.data.model.StokMutasi
 import com.example.data.model.TransferPedagang
+import com.example.utils.BackupDataPackage
+import com.example.utils.BackupZipHelper
 import com.example.utils.FormatUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -398,5 +400,44 @@ class KerupukRepository(private val dao: KerupukDao) {
             )
         )
         return Result.success(Unit)
+    }
+
+    // === BACKUP & RESTORE ===
+    suspend fun getBackupDataPackage(): BackupDataPackage {
+        val barangList = dao.getAllBarangList()
+        val mutasiList = dao.getAllMutasiList()
+        val penjualanList = dao.getAllPenjualanList()
+        val transferList = dao.getAllTransferList()
+        val setoranList = dao.getAllSetoranList()
+        val pinjamanList = dao.getAllPinjamanList()
+        val kasList = dao.getAllKasList()
+
+        return BackupZipHelper.createBackupPackage(
+            barangList = barangList,
+            mutasiList = mutasiList,
+            penjualanList = penjualanList,
+            transferList = transferList,
+            setoranList = setoranList,
+            pinjamanList = pinjamanList,
+            kasList = kasList
+        )
+    }
+
+    suspend fun restoreBackupDataPackage(backupPackage: BackupDataPackage): Result<Unit> {
+        return try {
+            dao.restoreDatabaseAtomic(
+                barangList = backupPackage.barangList,
+                mutasiList = backupPackage.mutasiList,
+                penjualanList = backupPackage.penjualanList,
+                transferList = backupPackage.transferList,
+                setoranList = backupPackage.setoranList,
+                pinjamanList = backupPackage.pinjamanList,
+                kasList = backupPackage.kasList
+            )
+            ensureDefaultBarang()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(Exception("Gagal melakukan pemulihan database: ${e.message}"))
+        }
     }
 }

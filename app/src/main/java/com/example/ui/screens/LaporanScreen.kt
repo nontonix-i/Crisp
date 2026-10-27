@@ -2,6 +2,9 @@ package com.example.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,11 +26,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +64,7 @@ import com.example.data.model.PenjualanHarian
 import com.example.data.model.ReceiptData
 import com.example.data.model.ReceiptFactory
 import com.example.ui.components.AppCard
+import com.example.ui.components.BackupImportConfirmDialog
 import com.example.ui.components.PrimaryActionButton
 import com.example.ui.components.ReceiptDialog
 import com.example.ui.components.SectionHeader
@@ -68,6 +80,7 @@ import com.example.ui.theme.StatusSuccess
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.utils.BackupDataPackage
 import com.example.utils.FormatUtils
 import com.example.viewmodel.KerupukViewModel
 
@@ -81,6 +94,27 @@ fun LaporanScreen(
 
     var periodFilter by remember { mutableStateOf("minggu") } // "hari", "minggu", "bulan"
     var selectedReceipt by remember { mutableStateOf<ReceiptData?>(null) }
+
+    // Backup & Restore states
+    var pendingImportPackage by remember { mutableStateOf<BackupDataPackage?>(null) }
+    var isExporting by remember { mutableStateOf(false) }
+    var isImportLoading by remember { mutableStateOf(false) }
+
+    val zipPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            isImportLoading = true
+            viewModel.parseBackupFile(context, uri) { result ->
+                isImportLoading = false
+                result.onSuccess { pkg ->
+                    pendingImportPackage = pkg
+                }.onFailure { err ->
+                    // error is emitted to snackbar inside ViewModel or can be logged
+                }
+            }
+        }
+    }
 
     val filteredPenjualan = remember(allPenjualan, periodFilter) {
         when (periodFilter) {
@@ -405,7 +439,128 @@ fun LaporanScreen(
             }
         }
 
-        // 7. TOMBOL EXPORT CSV
+        // 7. CADANGAN & PEMULIHAN DATA LENGKAP (ZIP)
+        item {
+            AppCard(
+                borderColor = ElectricBlueBorder
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(ElectricBlueLight, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderZip,
+                                    contentDescription = null,
+                                    tint = ElectricBlue,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "CADANGAN & RESTORE (ZIP)",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Arsip database terkompresi .zip",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Amankan seluruh rekaman transaksi, penjualan harian, stok, pinjaman, dan keuangan ke berkas .zip atau pulihkan database dari arsip cadangan kapan saja.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
+                        color = TextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Tombol Export ZIP
+                        Button(
+                            onClick = {
+                                isExporting = true
+                                viewModel.exportBackupZip(context) { _, _ ->
+                                    isExporting = false
+                                }
+                            },
+                            enabled = !isExporting && !isImportLoading,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                                .testTag("btn_export_zip"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ElectricBlue,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            if (isExporting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = "Mengemas...", fontSize = 12.sp)
+                            } else {
+                                Icon(imageVector = Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(text = "Export ZIP", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+
+                        // Tombol Import ZIP
+                        OutlinedButton(
+                            onClick = {
+                                zipPickerLauncher.launch("*/*")
+                            },
+                            enabled = !isExporting && !isImportLoading,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                                .testTag("btn_import_zip"),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue)
+                        ) {
+                            if (isImportLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = ElectricBlue,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = "Membaca...", fontSize = 12.sp, color = ElectricBlue)
+                            } else {
+                                Icon(imageVector = Icons.Default.CloudDownload, contentDescription = null, tint = ElectricBlue, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(text = "Import ZIP", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ElectricBlue)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 8. TOMBOL EXPORT CSV
         item {
             PrimaryActionButton(
                 text = "Export Laporan CSV",
@@ -420,6 +575,18 @@ fun LaporanScreen(
         item {
             Spacer(modifier = Modifier.height(72.dp))
         }
+    }
+
+    if (pendingImportPackage != null) {
+        BackupImportConfirmDialog(
+            backupPackage = pendingImportPackage!!,
+            onDismiss = { pendingImportPackage = null },
+            onConfirmRestore = {
+                viewModel.restoreBackupPackage(pendingImportPackage!!) { _, _ ->
+                    pendingImportPackage = null
+                }
+            }
+        )
     }
 
     if (selectedReceipt != null) {

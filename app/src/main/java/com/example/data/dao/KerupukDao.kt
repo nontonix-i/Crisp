@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.example.data.model.Barang
 import com.example.data.model.KasTransaksi
@@ -119,4 +120,97 @@ interface KerupukDao {
 
     @Query("SELECT COALESCE(SUM(jumlah), 0) FROM kas_transaksi WHERE tipe = 'keluar'")
     fun getTotalKasKeluar(): Flow<Int>
+
+    // === BACKUP & RESTORE QUERIES ===
+    @Query("SELECT * FROM barang")
+    suspend fun getAllBarangList(): List<Barang>
+
+    @Query("SELECT * FROM stok_mutasi ORDER BY id ASC")
+    suspend fun getAllMutasiList(): List<StokMutasi>
+
+    @Query("SELECT * FROM penjualan_harian ORDER BY tanggal ASC")
+    suspend fun getAllPenjualanList(): List<PenjualanHarian>
+
+    @Query("SELECT * FROM transfer_pedagang ORDER BY id ASC")
+    suspend fun getAllTransferList(): List<TransferPedagang>
+
+    @Query("SELECT * FROM setoran ORDER BY id ASC")
+    suspend fun getAllSetoranList(): List<Setoran>
+
+    @Query("SELECT * FROM pinjaman_setoran ORDER BY id ASC")
+    suspend fun getAllPinjamanList(): List<PinjamanSetoran>
+
+    @Query("SELECT * FROM kas_transaksi ORDER BY id ASC")
+    suspend fun getAllKasList(): List<KasTransaksi>
+
+    // Batch Inserts for Restore
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllBarang(list: List<Barang>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllMutasi(list: List<StokMutasi>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllPenjualan(list: List<PenjualanHarian>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllTransfer(list: List<TransferPedagang>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllSetoran(list: List<Setoran>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllPinjaman(list: List<PinjamanSetoran>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllKas(list: List<KasTransaksi>)
+
+    // Delete methods
+    @Query("DELETE FROM barang")
+    suspend fun deleteAllBarang()
+
+    @Query("DELETE FROM stok_mutasi")
+    suspend fun deleteAllMutasi()
+
+    @Query("DELETE FROM penjualan_harian")
+    suspend fun deleteAllPenjualan()
+
+    @Query("DELETE FROM transfer_pedagang")
+    suspend fun deleteAllTransfer()
+
+    @Query("DELETE FROM setoran")
+    suspend fun deleteAllSetoran()
+
+    @Query("DELETE FROM pinjaman_setoran")
+    suspend fun deleteAllPinjaman()
+
+    @Query("DELETE FROM kas_transaksi")
+    suspend fun deleteAllKas()
+
+    @Transaction
+    suspend fun restoreDatabaseAtomic(
+        barangList: List<Barang>,
+        mutasiList: List<StokMutasi>,
+        penjualanList: List<PenjualanHarian>,
+        transferList: List<TransferPedagang>,
+        setoranList: List<Setoran>,
+        pinjamanList: List<PinjamanSetoran>,
+        kasList: List<KasTransaksi>
+    ) {
+        deleteAllBarang()
+        deleteAllMutasi()
+        deleteAllPenjualan()
+        deleteAllTransfer()
+        deleteAllSetoran()
+        deleteAllPinjaman()
+        deleteAllKas()
+
+        if (barangList.isNotEmpty()) insertAllBarang(barangList)
+        if (mutasiList.isNotEmpty()) insertAllMutasi(mutasiList)
+        if (penjualanList.isNotEmpty()) insertAllPenjualan(penjualanList)
+        if (transferList.isNotEmpty()) insertAllTransfer(transferList)
+        if (setoranList.isNotEmpty()) insertAllSetoran(setoranList)
+        if (pinjamanList.isNotEmpty()) insertAllPinjaman(pinjamanList)
+        if (kasList.isNotEmpty()) insertAllKas(kasList)
+    }
 }
