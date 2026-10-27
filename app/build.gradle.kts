@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Base64
 
 plugins {
   alias(libs.plugins.android.application)
@@ -20,6 +21,36 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+  }
+
+  // Ensure rootDir/debug.keystore exists so validateSigningDebug never fails in CI or outside AI Studio
+  val debugKeystoreFile = file("${rootDir}/debug.keystore")
+  if (!debugKeystoreFile.exists() || debugKeystoreFile.length() == 0L) {
+    val base64KeystoreFile = file("${rootDir}/debug.keystore.base64")
+    if (base64KeystoreFile.exists()) {
+      try {
+        val base64Text = base64KeystoreFile.readText().replace("\r", "").replace("\n", "").trim()
+        val bytes = Base64.getMimeDecoder().decode(base64Text)
+        debugKeystoreFile.writeBytes(bytes)
+      } catch (_: Exception) {
+      }
+    }
+    if (!debugKeystoreFile.exists() || debugKeystoreFile.length() == 0L) {
+      try {
+        ProcessBuilder(
+          "keytool", "-genkeypair",
+          "-keystore", debugKeystoreFile.absolutePath,
+          "-alias", "androiddebugkey",
+          "-keyalg", "RSA",
+          "-keysize", "2048",
+          "-validity", "10000",
+          "-storepass", "android",
+          "-keypass", "android",
+          "-dname", "CN=Android Debug,O=Android,C=US"
+        ).inheritIO().start().waitFor()
+      } catch (_: Exception) {
+      }
+    }
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,

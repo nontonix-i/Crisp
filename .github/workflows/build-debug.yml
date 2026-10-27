@@ -35,12 +35,43 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Restore Debug Keystore
+      - name: Setup Environment Files
         run: |
+          if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+            echo "Creating .env from .env.example..."
+            cp .env.example .env
+          fi
+
+      - name: Restore or Generate Debug Keystore
+        run: |
+          # 1. Try decoding from base64 if present
           if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
             echo "Restoring debug.keystore from base64..."
-            base64 -d debug.keystore.base64 > debug.keystore
+            base64 --decode debug.keystore.base64 > debug.keystore 2>/dev/null || base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
           fi
+
+          # 2. If keystore is missing, 0 bytes, or cannot be read, generate one with keytool
+          if [ ! -f "debug.keystore" ] || [ ! -s "debug.keystore" ] || ! keytool -list -keystore debug.keystore -storepass android > /dev/null 2>&1; then
+            echo "Generating valid debug.keystore with keytool..."
+            rm -f debug.keystore
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          # 3. Ensure ~/.android/debug.keystore is also in sync
+          mkdir -p ~/.android
+          cp debug.keystore ~/.android/debug.keystore
+
+          # 4. Verify debug keystore configuration
+          echo "Debug keystore verified successfully:"
+          keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
 
       - name: Make Gradle Wrapper Executable
         run: |
